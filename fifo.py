@@ -1,146 +1,165 @@
-import random 
-import time 
-import matplotlib 
-import pandas as pd 
-matplotlib.use('Agg')  # Use Agg backend to avoid Tkinter issues 
-import matplotlib.pyplot as plt 
- 
-class Packet: 
-    def __init__(self, packet_id, size, arrival_time): 
-        self.packet_id = packet_id 
-        self.size = size  # In bytes 
-        self.arrival_time = arrival_time 
- 
-class Node: 
-    def __init__(self, node_id): 
-        self.node_id = node_id 
- 
-    def generate_packet(self): 
-        packet_size = random.randint(64, 1500)  # Random packet size between 64 and 1500 bytes 
-        return Packet(packet_id=f"Node{self.node_id}_Packet{int(time.time()*1000)}", 
-                      size=packet_size, 
-                      arrival_time=time.time()) 
- 
-class Switch: 
-    def __init__(self, switch_id, max_queue_size): 
-        self.switch_id = switch_id 
-        self.queue = [] 
-        self.max_queue_size = max_queue_size 
-        self.dropped_packets = 0 
- 
-    def enqueue_packet(self, packet): 
-        if len(self.queue) < self.max_queue_size: 
-            self.queue.append(packet) 
-        else: 
-            self.dropped_packets += 1 
- 
-    def process_packet(self): 
-        if self.queue: 
-            packet = self.queue.pop(0)  # FIFO: first packet in the queue is processed first 
-            return packet 
-        return None 
- 
-    def has_space(self): 
-        return len(self.queue) < self.max_queue_size 
- 
-    def queue_length(self): 
-        return len(self.queue) 
- 
-def simulate_traffic(): 
-    nodes = [Node(node_id=i) for i in range(1, 5)] 
-    switch1 = Switch(switch_id=1, max_queue_size=50) 
-    switch2 = Switch(switch_id=2, max_queue_size=50) 
- 
-    start_time = time.time() 
-    simulation_duration = 10  # Simulate for 10 seconds 
-    packet_latency = [] 
-    dropped_packets_total = 0 
- 
-    # Lists to track packet drops and queue lengths over time 
-    dropped_packets_sw1 = [] 
-    dropped_packets_sw2 = [] 
-    queue_length_sw1 = [] 
-    queue_length_sw2 = [] 
-    time_steps = [] 
- 
-    while time.time() - start_time < simulation_duration: 
-        # Variable sleep time to simulate packet bursts or slowdowns 
-        sleep_time = random.uniform(0.02, 0.1)  # Sleep between 20ms and 100ms 
-        time.sleep(sleep_time) 
- 
-        # Generate packets from all nodes 
-        for node in nodes: 
-            packet = node.generate_packet() 
-            if switch1.has_space(): 
-                switch1.enqueue_packet(packet) 
-            elif switch2.has_space(): 
-                switch2.enqueue_packet(packet) 
-            else: 
-                # Both switch 1 and switch 2 are full, drop the packet randomly between the two 
-                if random.choice([True, False]): 
-                    switch1.dropped_packets += 1 
-                else: 
-                    switch2.dropped_packets += 1 
- 
-        # Log the packet drops and queue lengths at this time step 
-        dropped_packets_sw1.append(switch1.dropped_packets) 
-        dropped_packets_sw2.append(switch2.dropped_packets) 
-        queue_length_sw1.append(switch1.queue_length())  # Track queue length of switch 1 
-        queue_length_sw2.append(switch2.queue_length())  # Track queue length of switch 2 
-        time_steps.append(time.time() - start_time) 
- 
-        # Process packets at switch 1 and forward to switch 2 if there's space 
-        packet_from_switch1 = switch1.process_packet() 
-        if packet_from_switch1: 
-            if switch2.has_space(): 
-                packet_latency.append(time.time() - packet_from_switch1.arrival_time) 
-                switch2.enqueue_packet(packet_from_switch1) 
-            else: 
-                switch1.enqueue_packet(packet_from_switch1) 
- 
-        # Process packets at switch 2 (final destination) 
-        switch2.process_packet() 
- 
-    # Report statistics 
-    print(f"Packets dropped at switch 1: {switch1.dropped_packets}") 
-    print(f"Packets dropped at switch 2: {switch2.dropped_packets}") 
-    dropped_packets_total = switch1.dropped_packets + switch2.dropped_packets 
-    print(f"Total packets dropped: {dropped_packets_total}") 
- 
-    if packet_latency: 
-        avg_latency = sum(packet_latency) / len(packet_latency) 
-        print(f"Average latency: {avg_latency:.4f} seconds") 
-    else: 
-        print("No packets processed.") 
- 
-    return dropped_packets_sw1, dropped_packets_sw2, queue_length_sw1, queue_length_sw2, time_steps 
- 
-def plot_results(dropped_sw1, dropped_sw2, queue_len_sw1, queue_len_sw2, time_steps): 
-    # Plot the packet drops for both switches over time 
-    plt.figure() 
-    plt.plot(time_steps, dropped_sw1, label="SW1 Drops", linestyle='-', color='blue')  # Solid line for SW1 
-    plt.plot(time_steps, dropped_sw2, label="SW2 Drops", linestyle='--', color='orange')  # Dashed line for SW2 
-    plt.xlabel("Time (seconds)") 
-    plt.ylabel("Packet Drops") 
-    plt.title("Packet Drops Over Time") 
-    plt.legend() 
-    plt.savefig("packet_drops_over_time.png")  # Save plot instead of showing it 
-    plt.close() 
-    print("Packet drops plot saved as 'packet_drops_over_time.png'.") 
- 
-    # Plot the queue length for both switches over time 
-    plt.figure() 
-    plt.plot(time_steps, queue_len_sw1, label="SW1 Queue Length", linestyle='-', color='green')  # Solid line for SW1 
-    plt.plot(time_steps, queue_len_sw2, label="SW2 Queue Length", linestyle='--', color='red')  # Dashed line for SW2 
-    plt.xlabel("Time (seconds)") 
-    plt.ylabel("Queue Length") 
-    plt.title("Queue Length Over Time") 
-    plt.legend() 
-    plt.savefig("queue_length_over_time.png")  # Save plot instead of showing it 
-    plt.close() 
-    print("Queue length plot saved as 'queue_length_over_time.png'.") 
- 
-if __name__ == "__main__": 
-    dropped_sw1, dropped_sw2, queue_len_sw1, queue_len_sw2, time_steps = simulate_traffic()  # Get the data over time 
-    plot_results(dropped_sw1, dropped_sw2, queue_len_sw1, queue_len_sw2, time_steps)  # Plot the results          
- 
+import random
+import time
+import matplotlib
+import pandas as pd
+matplotlib.use('Agg')  # Use Agg backend to avoid Tkinter issues
+import matplotlib.pyplot as plt
+
+# Set default font properties for the graphs
+plt.rc('font', family='Times New Roman', size=15)
+
+class Packet:
+    """
+    Represents a network packet with a unique packet ID, size, and arrival time.
+    """
+    def __init__(self, packet_id, size, arrival_time):
+        self.packet_id = packet_id
+        self.size = size  # Size in bytes
+        self.arrival_time = arrival_time
+
+class Node:
+    """
+    Represents a network node capable of generating packets.
+    """
+    def __init__(self, node_id):
+        self.node_id = node_id
+
+    def generate_packet(self, min_size=100, max_size=1200):
+        """
+        Generates a packet with a random size between min_size and max_size.
+        """
+        packet_size = random.randint(min_size, max_size)
+        return Packet(packet_id=f"Node{self.node_id}_Packet{int(time.time()*1000)}",
+                      size=packet_size,
+                      arrival_time=time.time())
+
+class Switch:
+    """
+    Represents a network switch with a queue to manage packets.
+    """
+    def __init__(self, switch_id, max_queue_size):
+        self.switch_id = switch_id
+        self.queue = []
+        self.max_queue_size = max_queue_size
+        self.dropped_packets = 0
+
+    def enqueue_packet(self, packet):
+        """
+        Enqueues a packet to the switch queue if there is space; otherwise, increments the dropped packet count.
+        """
+        if len(self.queue) < self.max_queue_size:
+            self.queue.append(packet)
+        else:
+            self.dropped_packets += 1
+
+    def process_packet(self):
+        """
+        Processes (removes) a packet from the front of the queue if available.
+        """
+        if self.queue:
+            return self.queue.pop(0)
+        return None
+
+    def has_space(self):
+        """
+        Checks if there is space in the queue for more packets.
+        """
+        return len(self.queue) < self.max_queue_size
+
+    def queue_length(self):
+        """
+        Returns the current length of the queue.
+        """
+        return len(self.queue)
+
+def simulate_traffic():
+    """
+    Simulates network traffic involving multiple nodes and switches over a set duration.
+    Returns packet drop data, queue lengths, and average latency.
+    """
+    nodes = [Node(node_id=i) for i in range(1, 5)]
+    switch1 = Switch(switch_id=1, max_queue_size=50)
+    switch2 = Switch(switch_id=2, max_queue_size=50)
+
+    start_time = time.time()
+    simulation_duration = 10
+    packet_latency = []
+
+    dropped_packets_sw1 = []
+    dropped_packets_sw2 = []
+    queue_length_sw1 = []
+    queue_length_sw2 = []
+    time_steps = []
+
+    while time.time() - start_time < simulation_duration:
+        time.sleep(random.uniform(0.02, 0.1))
+
+        for node in nodes:
+            packet = node.generate_packet()
+            if random.choice([True, False]):
+                if switch1.has_space():
+                    switch1.enqueue_packet(packet)
+                else:
+                    switch1.dropped_packets += 1
+            else:
+                if switch2.has_space():
+                    switch2.enqueue_packet(packet)
+                else:
+                    switch2.dropped_packets += 1
+
+        dropped_packets_sw1.append(switch1.dropped_packets)
+        dropped_packets_sw2.append(switch2.dropped_packets)
+        queue_length_sw1.append(switch1.queue_length())
+        queue_length_sw2.append(switch2.queue_length())
+        time_steps.append(time.time() - start_time)
+
+        packet_from_switch1 = switch1.process_packet()
+        if packet_from_switch1:
+            if switch2.has_space():
+                packet_latency.append(time.time() - packet_from_switch1.arrival_time)
+                switch2.enqueue_packet(packet_from_switch1)
+            else:
+                switch2.dropped_packets += 1
+
+        switch2.process_packet()
+
+    avg_latency = sum(packet_latency) / len(packet_latency) if packet_latency else 0
+
+    return (dropped_packets_sw1, dropped_packets_sw2, queue_length_sw1, 
+            queue_length_sw2, time_steps, avg_latency)
+
+def plot_results(dropped_sw1, dropped_sw2, queue_len_sw1, queue_len_sw2, time_steps):
+    """
+    Plots the results of the simulation including packet drops and queue length over time.
+    """
+    plt.figure()
+    plt.plot(time_steps, dropped_sw1, label="SW1 Drops", linestyle='-', color='blue')
+    plt.plot(time_steps, dropped_sw2, label="SW2 Drops", linestyle='-', color='red')
+    plt.xlabel("Time (seconds)")
+    plt.ylabel("Packet Drops")
+    plt.title("Packet Drops Over Time")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig("packet_drops_over_time.png")
+    plt.close()
+
+    plt.figure()
+    plt.plot(time_steps, queue_len_sw1, label="SW1 Queue Length", linestyle='-', color='blue')
+    plt.plot(time_steps, queue_len_sw2, label="SW2 Queue Length", linestyle='-', color='red')
+    plt.xlabel("Time (seconds)")
+    plt.ylabel("Queue Length")
+    plt.title("Queue Length Over Time")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig("queue_length_over_time.png")
+    plt.close()
+
+if __name__ == "__main__":
+    (dropped_sw1, dropped_sw2, queue_len_sw1, queue_len_sw2, 
+     time_steps, avg_latency) = simulate_traffic()
+
+    print(f"Average Latency: {avg_latency:.4f} seconds")
+    print(f"Total Packets Dropped at SW1: {dropped_sw1[-1]}")
+    print(f"Total Packets Dropped at SW2: {dropped_sw2[-1]}")
+
+    plot_results(dropped_sw1, dropped_sw2, queue_len_sw1, queue_len_sw2, time_steps)
